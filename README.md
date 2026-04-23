@@ -146,7 +146,8 @@ List, inspect, revoke:
 ```bash
 sudo wgh list                          # show all peers, active + revoked
 sudo wgh show alice-laptop             # reprint config + QR
-sudo wgh remove alice-laptop           # revoke (removes from wg0, deletes .conf)
+sudo wgh revoke alice-laptop           # soft revoke: drop from wg0, keep audit row
+sudo wgh remove alice-laptop           # hard delete: wipe DB row, free the IP
 sudo wgh status                        # wg show — handshakes, transfer, last-seen
 ```
 
@@ -225,7 +226,7 @@ A recent handshake (within ~3 minutes) confirms the tunnel is alive.
 - Client `DNS = 10.0.0.14` assumes a resolver runs on the server. If not, edit `/etc/wireguard-helper/settings.toml`, set `client_dns = "1.1.1.1"`, re-run `sudo wgh bootstrap`, and re-issue client configs with `sudo wgh show <label>`.
 
 **Peer is connected but I want to rotate their key**
-- `sudo wgh remove alice-laptop && sudo wgh add` — revokes the old key and issues a fresh one.
+- `sudo wgh revoke alice-laptop && sudo wgh add` — revokes the old key and issues a fresh one.
 
 ---
 
@@ -257,5 +258,5 @@ A recent handshake (within ~3 minutes) confirms the tunnel is alive.
 
 - Client `.conf` files contain the client's **private key**. Transfer them over a secure channel (SSH, encrypted chat) and delete them from intermediate locations after the teammate imports.
 - Every peer has a unique **preshared key** layered on top of the asymmetric crypto — protects against future post-quantum attacks on Curve25519.
-- `wgh remove` revokes a peer immediately and atomically; no server restart needed.
+- `wgh revoke` disconnects a peer immediately and atomically; no server restart needed. `wgh remove` additionally wipes the DB row and frees the IP for reuse.
 - The server's private key never leaves the server.

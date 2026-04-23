@@ -52,11 +52,19 @@ def show_cmd(
     _peers.show_peer(label)
 
 
+@app.command("revoke")
+def revoke_cmd(
+    label: str = typer.Argument(..., help="Peer name or <name>-<device> label.")
+) -> None:
+    """Revoke a peer: drop from wg0, delete .conf, keep DB row for audit."""
+    _peers.revoke_peer(label)
+
+
 @app.command("remove")
 def remove_cmd(
     label: str = typer.Argument(..., help="Peer name or <name>-<device> label.")
 ) -> None:
-    """Revoke a peer (removes from wg0 and wipes its .conf)."""
+    """Hard-delete a peer: wipes DB row and frees its tunnel IP for reuse."""
     _peers.remove_peer(label)
 
 

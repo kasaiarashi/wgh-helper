@@ -214,7 +214,21 @@ def show_peer(label: str) -> None:
     _emit(peer, settings)
 
 
-def remove_peer(label: str) -> None:
+def _disconnect_and_delete_conf(peer: db.Peer, settings: config.Settings) -> None:
+    """Tear down the peer's wg0 membership and wipe its client .conf."""
+    _rewrite_server_conf(settings)
+    _apply_live()
+    conf_path = config.CLIENTS_DIR / f"{peer.label}.conf"
+    if conf_path.exists():
+        conf_path.unlink()
+
+
+def revoke_peer(label: str) -> None:
+    """Soft-revoke: mark revoked in DB, drop from wg0, delete client .conf.
+
+    The DB row stays for audit. The tunnel IP remains retired unless the row
+    is later hard-deleted with `wgh remove`.
+    """
     bootstrap.ensure_root()
     settings = _require_bootstrapped()
     db.init()
@@ -223,19 +237,40 @@ def remove_peer(label: str) -> None:
         typer.secho(f"Peer '{peer.label}' already revoked.", fg=typer.colors.YELLOW)
         return
     if not questionary.confirm(
-        f"Revoke peer {peer.label} ({peer.tunnel_ip})?", default=False
+        f"Revoke peer {peer.label} ({peer.tunnel_ip})? "
+        "(keeps an audit record; use `wgh remove` afterwards to free the IP)",
+        default=False,
     ).ask():
         raise typer.Abort()
 
     db.revoke_peer(peer.id)
-    _rewrite_server_conf(settings)
-    _apply_live()
-
-    conf_path = config.CLIENTS_DIR / f"{peer.label}.conf"
-    if conf_path.exists():
-        conf_path.unlink()
-
+    _disconnect_and_delete_conf(peer, settings)
     typer.secho(f"Revoked {peer.label}.", fg=typer.colors.GREEN)
+
+
+def remove_peer(label: str) -> None:
+    """Hard-delete: wipe DB row and free the tunnel IP for reuse.
+
+    If the peer is still active, disconnects it from wg0 first.
+    """
+    bootstrap.ensure_root()
+    settings = _require_bootstrapped()
+    db.init()
+    peer = _resolve(label)
+
+    prompt = (
+        f"Permanently delete peer {peer.label} ({peer.tunnel_ip})? "
+        "DB row wiped, IP returns to the pool. This cannot be undone."
+    )
+    if not questionary.confirm(prompt, default=False).ask():
+        raise typer.Abort()
+
+    if peer.active:
+        db.revoke_peer(peer.id)
+        _disconnect_and_delete_conf(peer, settings)
+
+    db.delete_peer(peer.id)
+    typer.secho(f"Removed {peer.label}.", fg=typer.colors.GREEN)
 
 
 def status() -> None:
