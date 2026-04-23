@@ -119,14 +119,25 @@ def list_all() -> list[Peer]:
         return [_row_to_peer(r) for r in rows]
 
 
-def find_by_label(label: str) -> Peer | None:
+def find_by_exact_label(label: str) -> Peer | None:
+    """Match only on exact '<name>-<device>' label. Returns first hit in any state."""
     with cursor() as conn:
         rows = conn.execute("SELECT * FROM peers ORDER BY id").fetchall()
         for r in rows:
             p = _row_to_peer(r)
-            if p.label == label or p.name == label:
+            if p.label == label:
                 return p
         return None
+
+
+def find_active_by_name(name: str) -> list[Peer]:
+    """Return all active peers with the given user name."""
+    with cursor() as conn:
+        rows = conn.execute(
+            "SELECT * FROM peers WHERE name=? AND revoked_at IS NULL ORDER BY id",
+            (name,),
+        ).fetchall()
+        return [_row_to_peer(r) for r in rows]
 
 
 def used_tunnel_ips() -> set[str]:

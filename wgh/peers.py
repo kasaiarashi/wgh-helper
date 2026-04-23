@@ -101,7 +101,7 @@ def add_interactive() -> None:
     name, device = _prompt_peer_fields()
     label = f"{name}-{device}"
 
-    if db.find_by_label(label):
+    if db.find_by_exact_label(label):
         typer.secho(
             f"Peer '{label}' already exists. Remove it first with `wgh remove {label}`.",
             fg=typer.colors.RED,
@@ -148,7 +148,14 @@ def _emit(peer: db.Peer, settings: config.Settings) -> None:
     typer.echo("  Windows: import this .conf in WireGuard app.")
     typer.echo("  iOS/Android: scan the QR below in the WireGuard app.\n")
     typer.echo(qr.render_terminal(client_conf))
-    typer.echo("  (If the QR looks squashed, widen your terminal window.)")
+    typer.echo("  (If the QR looks squashed, widen your terminal window.)\n")
+    typer.echo("To view or copy the raw config from this shell:")
+    typer.secho(f"  sudo cat {conf_path}", fg=typer.colors.BRIGHT_BLUE)
+    typer.echo("To copy it to your own laptop over SSH:")
+    typer.secho(
+        f"  scp user@server:{conf_path} ./{peer.label}.conf",
+        fg=typer.colors.BRIGHT_BLUE,
+    )
 
 
 def list_peers() -> None:
@@ -165,13 +172,39 @@ def list_peers() -> None:
         )
 
 
+def _resolve(identifier: str) -> db.Peer:
+    """Map a bare name or full '<name>-<device>' label to a single peer.
+
+    - Exact label match wins (covers both active and revoked peers so we can
+      surface a useful 'revoked' error instead of 'not found').
+    - Otherwise, fall back to matching active peers by user name. If multiple
+      active devices share the name, refuse and list them so the caller can
+      disambiguate.
+    """
+    exact = db.find_by_exact_label(identifier)
+    if exact:
+        return exact
+
+    matches = db.find_active_by_name(identifier)
+    if not matches:
+        typer.secho(f"No peer matches '{identifier}'.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    if len(matches) > 1:
+        typer.secho(
+            f"'{identifier}' matches {len(matches)} active peers. "
+            "Specify the full label:",
+            fg=typer.colors.RED,
+        )
+        for p in matches:
+            typer.echo(f"  {p.label:<30} {p.tunnel_ip}")
+        raise typer.Exit(1)
+    return matches[0]
+
+
 def show_peer(label: str) -> None:
     settings = _require_bootstrapped()
     db.init()
-    peer = db.find_by_label(label)
-    if not peer:
-        typer.secho(f"No peer named '{label}'.", fg=typer.colors.RED)
-        raise typer.Exit(1)
+    peer = _resolve(label)
     if not peer.active:
         typer.secho(
             f"Peer '{peer.label}' is revoked — cannot show config.",
@@ -185,10 +218,7 @@ def remove_peer(label: str) -> None:
     bootstrap.ensure_root()
     settings = _require_bootstrapped()
     db.init()
-    peer = db.find_by_label(label)
-    if not peer:
-        typer.secho(f"No peer named '{label}'.", fg=typer.colors.RED)
-        raise typer.Exit(1)
+    peer = _resolve(label)
     if not peer.active:
         typer.secho(f"Peer '{peer.label}' already revoked.", fg=typer.colors.YELLOW)
         return
