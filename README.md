@@ -45,21 +45,37 @@ Before you touch the server, make sure:
 
 ## Part 2 — Install and configure the server
 
-This runs from your Windows dev machine (where this project lives) using git-bash or WSL.
+### 2a. Get the code onto the server
 
-### 2a. Deploy the code
+Recommended — clone from GitHub directly on the server:
 
 ```bash
-# from D:\Projects\wireguard-helper, in git-bash
-./deploy.sh user@vpn.example.com --install
+ssh user@your-server
+git clone https://github.com/kasaiarashi/wgh-helper.git ~/wgh-helper
+cd ~/wgh-helper
+sudo ./install.sh
 ```
 
-This rsyncs the project to `/opt/wireguard-helper/src/` on the server and runs `install.sh`, which:
+(Alternative: `./deploy.sh user@host --install` from a Windows/Linux dev box with `rsync` available, for pushing local uncommitted edits without going through GitHub.)
+
+`install.sh` does:
 
 - Installs `python3-venv`
 - Creates a venv at `/opt/wireguard-helper/venv/`
 - Installs the `wgh` CLI into it
 - Symlinks `wgh` to `/usr/local/bin/` so you can type `sudo wgh` anywhere.
+
+### Updating `wgh` later
+
+Pull new commits and re-run the installer — it upgrades the package in the venv in place, your DB and settings are untouched:
+
+```bash
+cd ~/wgh-helper
+git pull
+sudo ./install.sh
+```
+
+Existing peers stay connected through upgrades (nothing touches `wg0` unless you run `wgh bootstrap`, `add`, or `remove`).
 
 ### 2b. Bootstrap WireGuard
 

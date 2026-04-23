@@ -141,8 +141,12 @@ def find_active_by_name(name: str) -> list[Peer]:
 
 
 def used_tunnel_ips() -> set[str]:
+    """All tunnel IPs ever assigned — active *and* revoked.
+
+    The DB has a UNIQUE constraint on `tunnel_ip`, and we keep revoked rows
+    for audit. So a revoked peer's IP is permanently retired; the next new
+    peer gets the next unused address in the tunnel CIDR.
+    """
     with cursor() as conn:
-        rows = conn.execute(
-            "SELECT tunnel_ip FROM peers WHERE revoked_at IS NULL"
-        ).fetchall()
+        rows = conn.execute("SELECT tunnel_ip FROM peers").fetchall()
         return {r["tunnel_ip"] for r in rows}
